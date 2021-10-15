@@ -2,6 +2,7 @@
 
 # Press Shift+F10 to execute it or replace it with your code.
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+import os
 
 import numpy as np
 import scipy.io.wavfile
@@ -154,17 +155,13 @@ def block_audio(x, blockSize, hopSize, fs):
 
 def extract_features(x, blockSize, hopSize, fs):
     block, timeInSec = block_audio(x, blockSize, hopSize, fs)
-
-    Vsc = extract_spectral_centroid(block, fs)
-    Vzc = extract_zerocrossingrate(block)
-    features = np.vstack((Vsc, Vzc))
-
-    rms = extract_rms(block)
-    features = np.vstack((features, rms))
-    spectral_flux = np.hstack((extract_spectral_flux(block), [0]))
-    features = np.vstack((features, spectral_flux))
-    spectral_crest = extract_spectral_crest(block)
-    features = np.vstack((features, spectral_crest))
+    features = np.zeros((5, block.shape[0]))
+    features[0] = extract_spectral_centroid(block, fs)
+    features[1] = extract_rms(block)
+    features[2] = extract_zerocrossingrate(block)
+    features[3] = extract_spectral_crest(block)
+    features[4] = extract_spectral_flux(block)
+    return features
 
     return features
 
@@ -183,26 +180,112 @@ def get_feature_data(path, blockSize, hopSize):
     for count, wavFile in enumerate(folder):
         fs, x = scipy.io.wavfile.read(wavFile)
         all_feature_matrix = np.vstack((all_feature_matrix, aggregate_feature_per_file(extract_features(x, blockSize, hopSize, fs))))
+    all_feature_matrix = all_feature_matrix.T
     return all_feature_matrix
 
 
-def visualize_features(path_to_musicspeech):
-    ndarray1 = np.arange(10)
-    ndarray2 = np.arange(10)
-    data = (ndarray1, ndarray2)
-    plt.figure()
-    plt.subplot(3, 2, 1)
-    y1 = data[:, 0]
-    y2 = data[:, 1]
-    plt.scatter(np.shape(ndarray1)[1], y1, color='red')
-    plt.scatter(np.shape(ndarray1)[1], y2, color='blue')
-
-
 def normalize_zscore(featureData):
-    return featureData
+    normFeatureMatrix = np.zeros((10, featureData.shape[1]))
+
+    for n, feature in enumerate(featureData):
+        mean = np.mean(feature)
+        stdev = np.std(feature)
+        for i, x in enumerate(feature):
+            x = (x - mean) / stdev
+            normFeatureMatrix[n, i] = x
+
+    return normFeatureMatrix
 
 
-m = get_feature_data("D:\SchoolWork\ACA\ACAassign2\music_speech\music_wav", 1024, 256)
+def visualize_features(path_to_musicspeech):
+    blockSize = 1024
+    hopSize = 256
+
+    # Move to dataset folder
+    os.chdir(path_to_musicspeech)
+
+    # Location for music and speech files
+    music_wav_files = path_to_musicspeech + '/music_wav/'
+    speech_wav_files = path_to_musicspeech + '/speech_wav/'
+
+    # Extract features
+    music_features = get_feature_data(music_wav_files, blockSize, hopSize)
+    speech_features = get_feature_data(speech_wav_files, blockSize, hopSize)
+
+    num_music_files = music_features.shape[1]
+    num_speech_files = speech_features.shape[1]
+
+    # Concatenate the datasets
+    dataset_features = np.zeros((music_features.shape[0], num_music_files + num_speech_files))
+    dataset_features.shape
+
+    dataset_features[:, :num_music_files] = music_features
+    dataset_features[:, num_music_files:] = speech_features
+
+    normFeatureMatrix = normalize_zscore(dataset_features)
+
+    SC_mean = normFeatureMatrix[0, :]
+    SCR_mean = normFeatureMatrix[3, :]
+
+    SF_mean = normFeatureMatrix[4, :]
+    ZCR_mean = normFeatureMatrix[2, :]
+
+    RMS_mean = normFeatureMatrix[1, :]
+    RMS_std = normFeatureMatrix[6, :]
+
+    ZCR_std = normFeatureMatrix[7, :]
+    SCR_std = normFeatureMatrix[8, :]
+
+    SC_std = normFeatureMatrix[5, :]
+    SF_std = normFeatureMatrix[9, :]
+
+    plt.figure()
+
+    plt.subplot(3, 2, 1)
+    plt.title("SC mean   SCR mean")
+    #plt.xlabel("SC mean")
+    #plt.ylabel("SCR mean")
+    data1 = (SC_mean, SCR_mean)
+    plt.scatter(data1[0][:num_music_files], data1[1][:num_music_files], color='red')
+    plt.scatter(data1[0][num_music_files:], data1[1][num_music_files:], color='blue')
+
+    plt.subplot(3, 2, 2)
+    plt.title("SF mean   ZCR mean")
+    #plt.xlabel("SF mean")
+    #plt.ylabel("ZCR mean")
+    data2 = (SF_mean, ZCR_mean)
+    plt.scatter(data2[0][:num_music_files], data2[1][:num_music_files], color='red')
+    plt.scatter(data2[0][num_music_files:], data2[1][num_music_files:], color='blue')
+
+    plt.subplot(3, 2, 3)
+    plt.title("RMS mean   RMS std")
+    #plt.xlabel("RMS mean")
+    #plt.ylabel("RMS std")
+    data3 = (RMS_mean, RMS_std)
+    plt.scatter(data3[0][:num_music_files], data3[1][:num_music_files], color='red')
+    plt.scatter(data3[0][num_music_files:], data3[1][num_music_files:], color='blue')
+
+    plt.subplot(3, 2, 4)
+    plt.title("ZCR std   SCR std")
+    #plt.xlabel("ZCR std")
+    #plt.ylabel("SCR std")
+    data4 = (ZCR_std, SCR_std)
+    plt.scatter(data4[0][:num_music_files], data4[1][:num_music_files], color='red')
+    plt.scatter(data4[0][num_music_files:], data4[1][num_music_files:], color='blue')
+
+    plt.subplot(3, 2, 5)
+    plt.title("SC std   SF std")
+    #plt.xlabel("SC std")
+    #plt.ylabel("SF std")
+    data5 = (SC_std, SF_std)
+    plt.scatter(data5[0][:num_music_files], data5[1][:num_music_files], color='red')
+    plt.scatter(data5[0][num_music_files:], data5[1][num_music_files:], color='blue')
+
+    plt.show()
+
+    return normFeatureMatrix
+
+m = visualize_features("D:\SchoolWork\ACA\ACAassign2\music_speech")
 m = normalize_zscore(m)
 
 
